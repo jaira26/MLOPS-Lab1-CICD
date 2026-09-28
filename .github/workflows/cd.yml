@@ -1,29 +1,40 @@
-name: CD Pipeline
+name: CD - Release model
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    tags: ["v*"]
+
+permissions:
+  contents: write
 
 jobs:
-  deploy:
+  release:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+          cache: pip
 
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Train and generate model
-        run: python src/train.py
+      - name: Run tests
+        run: pytest -q
 
-      - name: Deploy Trained Model Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: trained-model-artifact
-          path: models/model.pkl
+      - name: Train and evaluate
+        run: python -m src.train
+
+      - name: Publish GitHub release with model
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            models/model.pkl models/metrics.json \
+            --title "Iris classifier ${{ github.ref_name }}" \
+            --notes-file models/metrics.json
