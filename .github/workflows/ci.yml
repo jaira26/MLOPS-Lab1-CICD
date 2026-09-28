@@ -11,29 +11,76 @@ on:
 
 jobs:
   test:
+    name: Lint and test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint with ruff
+        run: ruff check .
+
+      - name: Run pytest with coverage
+        run: pytest --junitxml=reports/pytest-report.xml --cov=src --cov-report=term-missing
+
+      - name: Run unittest
+        run: python -m unittest discover -s tests -t . -p "test_unittest.py"
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report-py${{ matrix.python-version }}
+          path: reports/pytest-report.xml
 
   train:
+    name: Train model and enforce quality gate
     needs: test
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+          cache: pip
+
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run training script
-        run: python src/train.py  # Adjust path to your training script if different
+
+      - name: Train and evaluate
+        run: python -m src.train
+
+      - name: Publish metrics to job summary
+        if: always()
+        run: |
+          echo "## Model metrics" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat models/metrics.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model-artifact
+          path: models/
+          retention-days: 14
