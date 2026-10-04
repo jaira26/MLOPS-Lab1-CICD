@@ -77,7 +77,7 @@ def main(model_dir: str | None = None) -> int:
 
     out_dir = Path(model_dir or config.MODEL_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / config.METRICS_FILENAME).write_text(json.dumps(metrics, indent=2))
+    (out_dir / config.METRICS_FILENAME).write_text(json.dumps(metrics, indent=2) + "\n")
     print(json.dumps(metrics, indent=2))
 
     if not metrics["passed_quality_gate"]:
